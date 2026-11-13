@@ -2,7 +2,7 @@
 Self healing Ai powered OS, using a PoweShell kernel with integrated Ai. Utilizing python and php in polyglot with PowerShell to handle lower requests and web calls.
 <div align="center">
 
-# ⚡ AEGIS-OS
+# ⚡ DANI-OS
 ### Self-Healing, AI-Powered Operating System Built on a Polyglot PowerShell Kernel
 
 [![PowerShell](https://img.shields.io/badge/Kernel-PowerShell%207.4%2B-5391FE?style=for-the-badge&logo=powershell&logoColor=white)](https://github.com/PowerShell/PowerShell)
