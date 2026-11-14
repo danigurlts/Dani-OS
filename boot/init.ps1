@@ -37,12 +37,23 @@ if ($Manifest.ParallelMemoryMatrix.ExpectedNodeCount -ne 9) {
 }
 
 $modelFile = Join-Path $ModelDir ($Config.ai.modelFile ?? "danios-core-3b.Q4_K_M.gguf")
-if ([type]::GetType('DaniOs.Kernel.AI, DaniOs.Kernel.AI') -ne $null -and (Test-Path $modelFile)) {
-    $aiReady = [DaniOs.Kernel.AI]::Initialize($modelFile, [int]($Config.ai.contextTokens ?? 4096))
-    if (-not $aiReady) {
-        throw "FATAL KERNEL PANIC: Embedded AI DLL failed to mount model '$modelFile'."
+$aiType = [System.Type]::GetType("DaniOs.Kernel.AI, DaniOs.Kernel.AI")
+if ($null -ne $aiType -and (Test-Path $modelFile)) {
+    try {
+        $aiReady = [DaniOs.Kernel.AI]::Initialize($modelFile, [int]($Config.ai.contextTokens ?? 4096))
+        if (-not $aiReady) {
+            Write-Warning "[DaniOs::Boot] Embedded AI DLL could not mount model '$modelFile'. Continuing in deterministic fallback mode."
+        }
+        else {
+            Write-Host "[DaniOs::Boot] Embedded SLM active in-kernel ($(Split-Path $modelFile -Leaf))." -ForegroundColor Green
+        }
     }
-    Write-Host "[DaniOs::Boot] Embedded SLM active in-kernel ($(Split-Path $modelFile -Leaf))." -ForegroundColor Green
+    catch {
+        Write-Warning "[DaniOs::Boot] AI load failed: $($_.Exception.Message). Continuing in deterministic fallback mode."
+    }
+}
+elseif (-not (Test-Path $modelFile)) {
+    Write-Warning "[DaniOs::Boot] No AI model found at '$modelFile'. Continuing in deterministic fallback mode."
 }
 
 Import-Module (Join-Path $KernelDir "Bridge.psm1")      -Force
