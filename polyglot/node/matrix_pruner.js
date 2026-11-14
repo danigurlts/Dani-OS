@@ -4,6 +4,16 @@ const yaml = require("js-yaml");
 
 const TIER_ORDER = ["tier_1_active", "tier_2_rolling", "tier_3_baseline"];
 const JOURNAL_ENTRY_REGEX = /^- \*\*\[(.*?)\] \[(.*?)\]\*\* (.*)$/;
+const MAX_TIER_PAYLOAD_BYTES = 256 * 1024;
+
+function assertTierPayloadLimit(rawTier, tier) {
+  for (const field of ["journal", "solutions", "state"]) {
+    const value = rawTier[field];
+    if (typeof value === "string" && Buffer.byteLength(value, "utf8") > MAX_TIER_PAYLOAD_BYTES) {
+      throw new RangeError(`MatrixPayloadTooLarge: ${tier}.${field} exceeds ${MAX_TIER_PAYLOAD_BYTES} bytes.`);
+    }
+  }
+}
 
 function parseJournalMarkdown(rawMd) {
   const lines = (rawMd || "").split(/\r?\n/);
@@ -30,7 +40,7 @@ function parseJournalMarkdown(rawMd) {
 
 function serializeJournalMarkdown(header, entries) {
   const baseHeader = header && header.trim().length > 0 ? header.trim() : "# DaniOs Run Journal";
-  const body = entries.map((e) => e.raw || `- **[${e.timestamp}] [${e.category}]** ${e.message}`).join("\n");
+  const body = entries.map((e) => e.raw || `- **[${e.timestamp}] [${e.category]}]** ${e.message}`).join("\n");
   return body.length > 0 ? `${baseHeader}\n\n${body}\n` : `${baseHeader}\n`;
 }
 
@@ -69,6 +79,7 @@ function compactAndPruneMatrix(payload) {
   const parsed = {};
   for (const tier of TIER_ORDER) {
     const rawTier = incomingTiers[tier] || {};
+    assertTierPayloadLimit(rawTier, tier);
     parsed[tier] = {
       journal: parseJournalMarkdown(rawTier.journal),
       solutions: parseSolutionsYaml(rawTier.solutions),
@@ -150,28 +161,42 @@ function compactAndPruneMatrix(payload) {
 }
 
 function parseStructuredStream(rawText, format = "auto") {
-  const trimmed = (rawText || "").trim();
-  if (!trimmed) return { format: "empty", records: [] };
+  const input = typeof rawText === "string" ? rawText : "";
+  const firstNonWhitespace = input.search(/\S/);
+  if (firstNonWhitespace === -1) return { format: "empty", records: [] };
 
-  if (format === "json" || (format === "auto" && (trimmed.startsWith("{") || trimmed.startsWith("[")))) {
-    return { format: "json", data: JSON.parse(trimmed) };
+  if (format === "json" || (format === "auto" && (input[firstNonWhitespace] === "{" || input[firstNonWhitespace] === "["))) {
+    return { format: "json", data: JSON.parse(input) };
   }
 
   if (format === "yaml" || format === "yml") {
-    return { format: "yaml", data: yaml.load(trimmed) };
+    return { format: "yaml", data: yaml.load(input) };
   }
 
-  const lines = trimmed.split(/\r?\n/);
-  const anomalies = lines
-    .map((line, idx) => ({ line: idx + 1, text: line }))
-    .filter((item) => /\b(FATAL|ERROR|EXCEPTION|PANIC|TIMEOUT|DENIED)\b/i.test(item.text));
+  let end = input.length;
+  while (end > firstNonWhitespace && /\s/u.test(input[end - 1])) end--;
 
-  return {
-    format: "log_stream",
-    totalLines: lines.length,
-    anomalyCount: anomalies.length,
-    anomalies: anomalies.slice(0, 100)
-  };
+  const anomalyRegex = /\b(FATAL|ERROR|EXCEPTION|PANIC|TIMEOUT|DENIED)\b/i;
+  const anomalies = [];
+  let totalLines = 0;
+  let anomalyCount = 0;
+  let lineStart = firstNonWhitespace;
+
+  while (lineStart < end) {
+    let lineEnd = input.indexOf("\n", lineStart);
+    if (lineEnd === -1 || lineEnd > end) lineEnd = end;
+
+    const line = input.slice(lineStart, lineEnd).replace(/\r$/, "").trim();
+    totalLines++;
+    if (anomalyRegex.test(line)) {
+      anomalyCount++;
+      if (anomalies.length < 100) anomalies.push({ line: totalLines, text: line });
+    }
+
+    lineStart = lineEnd + 1;
+  }
+
+  return { format: "log_stream", totalLines, anomalyCount, anomalies };
 }
 
 module.exports = { compactAndPruneMatrix, parseStructuredStream };
