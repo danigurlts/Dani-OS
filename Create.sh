@@ -4450,12 +4450,24 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File ./setup/Install-DaniOs.ps1
  License
 ​Distributed under the GNU General Public License v3.0 (GPL-3.0). See LICENSE for full terms.
 EOF
-# ​10. Stage, Commit & Push to origin main
-​echo "[7/7] Committing and pushing to https://github.com/danigurlts/danios ..."
-git branch -M main
+# 10. Stage, commit, and push the current branch
+echo "[7/7] Committing and pushing to origin..."
+
 git add .
-git commit -m "Scaffold complete DaniOs polyglot DLL kernel, parallel 3x3 firewall matrix, and Cloud Origin vault"
-git push -u origin main
-​echo ""
-echo " ✅ Done! Refresh https://github.com/danigurlts/danios on your phone."
-echo ""
+
+if ! git diff --cached --quiet; then
+  git commit -m "Scaffold DaniOs polyglot kernel and Cloud Origin vault"
+else
+  echo "No staged changes to commit."
+fi
+
+branch="$(git branch --show-current)"
+if [[ -z "$branch" ]]; then
+  echo "ERROR: Could not determine the current branch." >&2
+  exit 1
+fi
+
+git push -u origin "$branch"
+
+echo
+echo "✅ Done! Pushed branch '$branch' to $(git remote get-url origin)"
