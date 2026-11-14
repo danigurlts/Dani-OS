@@ -88,14 +88,21 @@ $rid          = Get-TargetRuntimeIdentifier
 $bootExeName  = if ($IsWindows) { "DaniOs.Boot.exe" } else { "DaniOs.Boot" }
 $finalBootExe = Join-Path $BootDir $bootExeName
 
-if (-not $SkipDotNetBuild -and (Test-Path $bootProj)) {
+if (-not $SkipDotNetBuild) {
+    if (-not (Test-Path $bootProj)) {
+        throw "Missing boot project: '$bootProj'. Add boot/DaniOs.Boot/DaniOs.Boot.csproj before running installation."
+    }
+
     & dotnet publish $bootProj -c Release -r $rid --self-contained true -o $KernelBinDir --nologo
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
+
     $publishedBootExe = Join-Path $KernelBinDir $bootExeName
-    if (Test-Path $publishedBootExe) {
-        Move-Item -Path $publishedBootExe -Destination $finalBootExe -Force
-        if (-not $IsWindows) { & chmod +x $finalBootExe }
+    if (-not (Test-Path $publishedBootExe)) {
+        throw "Boot publish succeeded but no executable was produced at '$publishedBootExe'."
     }
+
+    Move-Item -Path $publishedBootExe -Destination $finalBootExe -Force
+    if (-not $IsWindows) { & chmod +x $finalBootExe }
 }
 
 if (-not $SkipNpmInstall -and (Test-Path (Join-Path $NodePolyDir "package.json"))) {
@@ -131,5 +138,10 @@ if (-not $SkipVerification) {
 }
 
 if ($BootAfterInstall) {
-    if (Test-Path $finalBootExe) { & $finalBootExe } else { & (Join-Path $BootDir "init.ps1") -ConfigPath $liveConfigPath }
+    if (Test-Path $finalBootExe) {
+        & $finalBootExe -Headless
+    }
+    else {
+        & (Join-Path $BootDir "init.ps1") -ConfigPath $liveConfigPath -Headless
+    }
 }
