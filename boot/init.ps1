@@ -37,7 +37,7 @@ if ($Manifest.ParallelMemoryMatrix.ExpectedNodeCount -ne 9) {
 }
 
 $modelFile = Join-Path $ModelDir ($Config.ai.modelFile ?? "danios-core-3b.Q4_K_M.gguf")
-if ([System.Management.Automation.PSTypeName]'DaniOs.Kernel.AI'.Type -and (Test-Path $modelFile)) {
+if ([type]::GetType('DaniOs.Kernel.AI, DaniOs.Kernel.AI') -ne $null -and (Test-Path $modelFile)) {
     $aiReady = [DaniOs.Kernel.AI]::Initialize($modelFile, [int]($Config.ai.contextTokens ?? 4096))
     if (-not $aiReady) {
         throw "FATAL KERNEL PANIC: Embedded AI DLL failed to mount model '$modelFile'."
