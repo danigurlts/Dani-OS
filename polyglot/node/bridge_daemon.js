@@ -10,6 +10,7 @@ const PIPE_NAME = process.env.DANIOS_PIPE_NAME || "DaniOs.Pipe.Node";
 const SESSION_NONCE = process.env.DANIOS_SESSION_NONCE || "";
 const HTTP_PORT = Number(process.env.DANIOS_HTTP_PORT || 4110);
 const WS_PORT = Number(process.env.DANIOS_WS_PORT || 4111);
+const MAX_IPC_FRAME_BYTES = 1024 * 1024;
 
 if (!SESSION_NONCE) {
   process.stderr.write("[DaniOs::Node] FATAL: Missing DANIOS_SESSION_NONCE in environment.\n");
@@ -58,41 +59,61 @@ function dispatchKernelAction(envelope) {
       return serverFactory.spawnDynamicServer(payload);
     case "StopDynamicServer":
       return { stopped: serverFactory.stopDynamicServer(payload.id) };
+    case "Ping":
+      return { pong: true, nodeVersion: process.version };
     default:
       throw new Error(`UnsupportedNodeAction: '${action}'`);
+  }
+}
+
+function processLine(socket, frame) {
+  const line = frame.toString("utf8").trim();
+  if (!line) return;
+
+  let requestId = null;
+  try {
+    const envelope = JSON.parse(line);
+    requestId = envelope.Id || null;
+    const resultPayload = dispatchKernelAction(envelope);
+
+    socket.write(JSON.stringify({
+      Id: requestId, Nonce: SESSION_NONCE, Domain: "Node", Ok: true,
+      Timestamp: new Date().toISOString(), Payload: resultPayload
+    }) + "\n");
+  } catch (err) {
+    socket.write(JSON.stringify({
+      Id: requestId, Nonce: SESSION_NONCE, Domain: "Node", Ok: false,
+      Timestamp: new Date().toISOString(), Payload: { error: err.message }
+    }) + "\n");
   }
 }
 
 const pipeEndpoint = resolveDotNetPipePath(PIPE_NAME);
 
 const pipeServer = net.createServer((socket) => {
-  let buffer = "";
+  let pending = Buffer.alloc(0);
 
   socket.on("data", (chunk) => {
-    buffer += chunk.toString("utf8");
-    let newlineIdx;
+    let offset = 0;
+    while (offset < chunk.length) {
+      const newlineIdx = chunk.indexOf(0x0a, offset);
+      const segmentEnd = newlineIdx === -1 ? chunk.length : newlineIdx;
+      const segment = chunk.subarray(offset, segmentEnd);
 
-    while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0, newlineIdx).trim();
-      buffer = buffer.slice(newlineIdx + 1);
-      if (!line) continue;
-
-      let requestId = null;
-      try {
-        const envelope = JSON.parse(line);
-        requestId = envelope.Id || null;
-        const resultPayload = dispatchKernelAction(envelope);
-
-        socket.write(JSON.stringify({
-          Id: requestId, Nonce: SESSION_NONCE, Domain: "Node", Ok: true,
-          Timestamp: new Date().toISOString(), Payload: resultPayload
-        }) + "\n");
-      } catch (err) {
-        socket.write(JSON.stringify({
-          Id: requestId, Nonce: SESSION_NONCE, Domain: "Node", Ok: false,
-          Timestamp: new Date().toISOString(), Payload: { error: err.message }
-        }) + "\n");
+      if (pending.length + segment.length > MAX_IPC_FRAME_BYTES) {
+        socket.destroy(new Error("IpcFrameTooLarge"));
+        return;
       }
+
+      if (newlineIdx === -1) {
+        if (segment.length > 0) pending = pending.length ? Buffer.concat([pending, segment]) : Buffer.from(segment);
+        return;
+      }
+
+      const frame = pending.length ? Buffer.concat([pending, segment]) : segment;
+      pending = Buffer.alloc(0);
+      processLine(socket, frame);
+      offset = newlineIdx + 1;
     }
   });
 
