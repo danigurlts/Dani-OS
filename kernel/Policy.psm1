@@ -63,7 +63,7 @@ function Test-DaniScriptAst {
 
     $ast = [Parser]::ParseInput($ScriptText, [ref]$tokens, [ref]$parseErrs)
 
-    if ($null -ne $parseErrs -and $parseErrs.Count -gt 0) {
+    if ($null -ne $parseErrs -and $@(parseErrs).Count -gt 0) {
         foreach ($err in $parseErrs) {
             $violations.Add("SyntaxError (Line $($err.Extent.StartLineNumber)): $($err.Message)")
         }
@@ -125,10 +125,10 @@ function Test-DaniScriptAst {
     }
 
     return [PSCustomObject]@{
-        Approved   = ($violations.Count -eq 0)
+        Approved   = ($@(violations).Count -eq 0)
         Violations = @($violations)
         AstSummary = [PSCustomObject]@{
-            CommandCount = $commandNodes.Count
+            CommandCount = $@(commandNodes).Count
             Commands     = @($detectedCmds)
         }
     }
@@ -255,3 +255,6 @@ Export-ModuleMember -Function @(
     "Test-DaniWebToNativeRequest",
     "Invoke-DaniMediatedNativeWrite"
 )
+
+
+
