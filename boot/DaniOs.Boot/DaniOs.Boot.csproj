@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DaniOs.Boot</AssemblyName>
+    <OutputPath>..\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\kernel\src\DaniOs.Kernel.Host\DaniOs.Kernel.Host.csproj" />
+    <ProjectReference Include="..\..\kernel\src\DaniOs.Kernel.AI\DaniOs.Kernel.AI.csproj" />
+  </ItemGroup>
+</Project>
