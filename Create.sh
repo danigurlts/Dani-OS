@@ -4450,7 +4450,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File ./setup/Install-DaniOs.ps1
  License
 ​Distributed under the GNU General Public License v3.0 (GPL-3.0). See LICENSE for full terms.
 EOF
-​10. Stage, Commit & Push to origin main
+# ​10. Stage, Commit & Push to origin main
 ​echo "[7/7] Committing and pushing to https://github.com/danigurlts/danios ..."
 git branch -M main
 git add .
