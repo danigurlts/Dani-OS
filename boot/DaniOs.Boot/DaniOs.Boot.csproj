@@ -5,11 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>DaniOs.Boot</AssemblyName>
-    <OutputPath>..\</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <RootNamespace>DaniOs.Boot</RootNamespace>
   </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\kernel\src\DaniOs.Kernel.Host\DaniOs.Kernel.Host.csproj" />
-    <ProjectReference Include="..\..\kernel\src\DaniOs.Kernel.AI\DaniOs.Kernel.AI.csproj" />
   </ItemGroup>
 </Project>
