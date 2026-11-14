@@ -1,0 +1,10 @@
+{
+  "host": "0.0.0.0",
+  "port": 8443,
+  "storageDir": "./vault_data",
+  "defaultAccountSecret": "REPLACE_WITH_PROVISIONED_ACCOUNT_SECRET",
+  "maxClockSkewSec": 300,
+  "maxPayloadBytes": 262144,
+  "retainRevisions": 3,
+  "allowAutoBindNewFingerprints": true
+}

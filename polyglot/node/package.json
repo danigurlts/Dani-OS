@@ -1,0 +1,14 @@
+{
+  "name": "danios-polyglot-node",
+  "version": "1.0.0",
+  "description": "DaniOs Zone 3 Node.js Named-Pipe daemon, 3x3 matrix parser/pruner, and browser-desktop server factory",
+  "main": "bridge_daemon.js",
+  "license": "GPL-3.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "ws": "^8.18.0"
+  }
+}

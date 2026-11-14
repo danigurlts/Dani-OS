@@ -1,0 +1,26 @@
+# Live secrets & local machine configs
+config/kernel.config.json
+cloud-origin/vault.config.json
+cloud-origin/vault_data/
+
+# Compiled .NET/PowerShell kernel binaries & native inference DLLs
+kernel/bin/*.dll
+kernel/bin/*.exe
+kernel/bin/*.pdb
+kernel/bin/*.json
+kernel/bin/native/*.dll
+kernel/bin/native/*.so
+kernel/bin/native/*.dylib
+boot/DaniOs.Boot.exe
+boot/DaniOs.Boot
+**/bin/
+**/obj/
+
+# Local SLM model weights
+kernel/models/*.gguf
+kernel/models/*.onnx
+
+# Polyglot dependencies & runtime artifacts
+polyglot/node/node_modules/
+polyglot/python/__pycache__/
+.parallel_3x3_firewall/

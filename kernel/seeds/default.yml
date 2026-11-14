@@ -1,0 +1,44 @@
+version: "1.0.0"
+kernel_invariants:
+  immutable_paths:
+    - "/kernel/bin"
+    - "/kernel/models"
+    - "/kernel/seeds"
+  pruning_policy:
+    max_entries_per_tier: 50
+    promotion_threshold_runs: 3
+    auto_compact_on_shutdown: true
+
+trust_zones:
+  native_to_unsecure:
+    allow_outbound_http: true
+    allow_browser_ipc: true
+    allow_syscall_probes: true
+    redact_env_secrets: true
+  unsecure_to_native:
+    allow_direct_fs_write: false
+    require_schema_validation: true
+    require_session_nonce: true
+
+baseline_playbooks:
+  - id: "ERR_3X3_CORRUPT"
+    signature: "MemoryMatrixIntegrityException|SchemaValidationFailed"
+    severity: "critical"
+    remediation:
+      action: "RestoreTierFromGoldenSeed"
+      target: "parallel_partition"
+      verify_hash: true
+
+  - id: "ERR_POLYGLOT_WORKER_HANG"
+    signature: "NamedPipeTimeout|WorkerUnresponsive"
+    severity: "high"
+    remediation:
+      action: "RestartPolyglotWorker"
+      allow_ai_synthesis: true
+
+  - id: "ERR_WEB_PAYLOAD_REJECTED"
+    signature: "ZoneBoundaryViolation|InvalidNonce"
+    severity: "medium"
+    remediation:
+      action: "DropPayloadAndLogJournal"
+      quarantine_source: true

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0.0",
+  "osIdentity": "DaniOs",
+  "bootGeneration": 0,
+  "firewallState": {
+    "parallelPartitionMounted": false,
+    "nativeFsLocked": true,
+    "unsecureBridgeActive": false
+  },
+  "desktopBrowserIntegration": {
+    "bindAddress": "127.0.0.1",
+    "httpPort": 4110,
+    "wsPort": 4111,
+    "requireEphemeralToken": true
+  },
+  "polyglotDomains": {
+    "node": {
+      "pipeName": "DaniOs.Pipe.Node",
+      "capabilities": ["parse_matrix", "browser_server", "ws_stream", "fs_watch"]
+    },
+    "php": {
+      "pipeName": "DaniOs.Pipe.PHP",
+      "capabilities": ["http_outbound", "webhook_ingest", "rest_client", "remote_sync"]
+    },
+    "python": {
+      "pipeName": "DaniOs.Pipe.Python",
+      "capabilities": ["syscall_probe", "hardware_telemetry", "memory_inspect"]
+    }
+  },
+  "integrityBaselines": {}
+}

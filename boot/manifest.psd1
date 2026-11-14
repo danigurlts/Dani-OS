@@ -1,0 +1,63 @@
+@{
+    ManifestVersion = "1.0.0"
+    OSName          = "DaniOs"
+    License         = "GNU-GPL-3.0"
+    Architecture    = "Polyglot-DLL-Kernel-3x3"
+
+    KernelCore = @{
+        RequiredAssemblies = @(
+            "kernel/bin/System.Management.Automation.dll",
+            "kernel/bin/DaniOs.Kernel.Host.dll",
+            "kernel/bin/DaniOs.Kernel.AI.dll"
+        )
+        NativeInferenceBinaries = @{
+            Windows = "kernel/bin/native/llama.dll"
+            Linux   = "kernel/bin/native/libllama.so"
+            MacOS   = "kernel/bin/native/libllama.dylib"
+        }
+        GoldenSeeds = @{
+            Markdown = "kernel/seeds/default.md"
+            Yaml     = "kernel/seeds/default.yml"
+            Json     = "kernel/seeds/default.json"
+        }
+        ImmutablePaths = @(
+            "/kernel/bin",
+            "/kernel/models",
+            "/kernel/seeds",
+            "/kernel/Policy.psm1",
+            "/boot/DaniOs.Boot"
+        )
+    }
+
+    ParallelMemoryMatrix = @{
+        Topology          = "3x3"
+        ExpectedNodeCount = 9
+        Tiers             = @(
+            @{ Name = "tier_1_active";   Role = "ImmediateRunState" },
+            @{ Name = "tier_2_rolling";  Role = "RollingConsolidation" },
+            @{ Name = "tier_3_baseline"; Role = "KernelInvariants" }
+        )
+        NodeFiles         = @("journal.md", "solutions.yml", "state.json")
+        SecurityIsolation = @{
+            EnforceKernelOnlyAcl    = $true
+            DenyStandardUsers       = $true
+            HideFromDirectoryScan   = $true
+            BlockZone3PathTraversal = $true
+        }
+    }
+
+    EncapsulatedNativeFS = @{
+        DefaultNativeSubdir       = "native"
+        EnforcePathContainment    = $true
+        AutoHealHashDrift         = $true
+        BlockedWebWriteExtensions = @(".exe", ".dll", ".sys", ".drv", ".bat", ".cmd", ".vbs", ".scr", ".msi", ".so", ".dylib")
+        AstValidatedExtensions    = @(".ps1", ".psm1")
+    }
+
+    CloudOriginContract = @{
+        CompressionAlgorithm = "Brotli"
+        EncryptionCipher     = "AES-256-GCM"
+        AuthHeaderPrefix     = "X-DaniOs-"
+        RequiredHeaders      = @("X-DaniOs-Fingerprint", "X-DaniOs-Timestamp", "X-DaniOs-Body-SHA256", "X-DaniOs-Signature")
+    }
+}

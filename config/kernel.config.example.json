@@ -1,0 +1,59 @@
+{
+  "osName": "DaniOs",
+  "schemaVersion": "1.0.0",
+  "kernel": {
+    "heartbeatIntervalMs": 1500,
+    "autoHealEnabled": true,
+    "requireSandboxValidation": true,
+    "maxAutonomousRetries": 3,
+    "perimeterSweepIntervalTicks": 20,
+    "autoHealNativeDrift": true
+  },
+  "ai": {
+    "provider": "in-kernel-dll",
+    "nativeRuntime": "llama.cpp",
+    "modelFile": "danios-core-3b.Q4_K_M.gguf",
+    "contextTokens": 4096,
+    "maxDiagnosisTokens": 256,
+    "gpuLayers": 0,
+    "fallbackToDeterministicRules": true
+  },
+  "memoryMatrix": {
+    "parallelPartitionPath": null,
+    "formats": ["md", "yml", "json"],
+    "tiers": ["tier_1_active", "tier_2_rolling", "tier_3_baseline"],
+    "expansionFactor": 3,
+    "autoPruneOnShutdown": true,
+    "maxJournalEntriesPerTier": 50,
+    "promotionThresholdRuns": 3,
+    "minSolutionConfidenceScore": 0.75,
+    "retainMaxRollbackSnapshots": 15
+  },
+  "desktopBrowserIntegration": {
+    "enabled": true,
+    "bindAddress": "127.0.0.1",
+    "httpPort": 4110,
+    "wsPort": 4111,
+    "requireEphemeralToken": true,
+    "eventHistoryBufferSize": 100
+  },
+  "polyglot": {
+    "ipcTransport": "named_pipe",
+    "pipeTimeoutMs": 4000,
+    "workers": {
+      "node": { "enabled": true, "pipeName": "DaniOs.Pipe.Node", "workerCount": 1, "entryPoint": "polyglot/node/bridge_daemon.js" },
+      "php": { "enabled": true, "pipeName": "DaniOs.Pipe.PHP", "workerCount": 1, "entryPoint": "polyglot/php/bridge_worker.php" },
+      "python": { "enabled": true, "pipeName": "DaniOs.Pipe.Python", "workerCount": 1, "entryPoint": "polyglot/python/bridge_server.py" }
+    }
+  },
+  "cloudOrigin": {
+    "enabled": true,
+    "originUrl": "https://origin.danios.local/api",
+    "accountSecret": "REPLACE_WITH_PROVISIONED_ACCOUNT_SECRET",
+    "kernelSalt": "DaniOs-Kernel-v1",
+    "autoBackupOnCleanBoot": true,
+    "autoBackupOnHealCommit": true,
+    "autoRestoreOnZeroGeneration": true,
+    "requestTimeoutSec": 8
+  }
+}
