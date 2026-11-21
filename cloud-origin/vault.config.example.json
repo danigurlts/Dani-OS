@@ -1,8 +1,13 @@
 {
-  "host": "0.0.0.0",
+  "host": "127.0.0.1",
   "port": 8443,
   "storageDir": "./vault_data",
   "defaultAccountSecret": "REPLACE_WITH_PROVISIONED_ACCOUNT_SECRET",
+  "allowHttp": true,
+  "tls": {
+    "keyFile": "",
+    "certFile": ""
+  },
   "maxClockSkewSec": 300,
   "maxPayloadBytes": 262144,
   "retainRevisions": 3,

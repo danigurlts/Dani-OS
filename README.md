@@ -27,5 +27,21 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./setup/Install-DaniOs.ps1
 
 # Boot kernel
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./boot/init.ps1
- License
-​Distributed under the GNU General Public License v3.0 (GPL-3.0). See LICENSE for full terms.
+```
+
+## Cloud Origin Vault
+
+The vault requires `DANIOS_VAULT_MASTER_KEY` to be 64 hexadecimal characters. Configure `DANIOS_VAULT_SECRET` to the same account secret used by the kernel. The example config enables HTTP only on `127.0.0.1` for local development. For remote access, set `allowHttp` to `false`, configure both `tls.keyFile` and `tls.certFile` (or `DANIOS_VAULT_TLS_KEY` and `DANIOS_VAULT_TLS_CERT`), and bind the vault to the intended interface. The server rejects non-loopback HTTP binds.
+
+```powershell
+$env:DANIOS_VAULT_MASTER_KEY = '<64-character hex key>'
+$env:DANIOS_VAULT_SECRET = '<provisioned account secret>'
+$env:DANIOS_VAULT_ALLOW_HTTP = 'true'
+node ./cloud-origin/vault_server.js
+```
+
+For local HTTP development, keep the vault host at `127.0.0.1` and set `DANIOS_VAULT_ALLOW_HTTP=true` (or use `allowHttp: true` in the config file). Do not expose that mode on a network interface.
+
+## License
+
+Distributed under the GNU General Public License v3.0 (GPL-3.0). See [LICENSE](LICENSE) for full terms.

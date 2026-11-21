@@ -28,3 +28,5 @@
         throw "SecurityFault [PathResolutionFailed]: Unable to securely resolve physical path '$Path'. Access denied."
     }
 }
+
+Export-ModuleMember -Function Get-RealCanonicalPath
