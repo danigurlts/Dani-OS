@@ -1,12 +1,13 @@
-#Requires -Version 7.4
+#Requires -Version 7.0
 using namespace System.IO.Pipes
 using namespace System.Text
 using namespace System.Security.Cryptography
 
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'Compat.ps1')
 
 $script:KernelSeedDir = Join-Path $PSScriptRoot "seeds"
-$script:SessionNonce  = [Convert]::ToHexString([RandomNumberGenerator]::GetBytes(24))
+$script:SessionNonce  = ConvertTo-DaniHex (New-DaniRandomBytes 24)
 $script:PipeRegistry  = @{
     Node   = "DaniOs.Pipe.Node"
     PHP    = "DaniOs.Pipe.PHP"
@@ -128,7 +129,7 @@ function Invoke-DaniPolyglotBridge {
             throw "NamedPipeEmptyResponse from domain '$Domain'."
         }
 
-        $parsed = $rawResponse | ConvertFrom-Json -AsHashtable
+        $parsed = $rawResponse | ConvertFrom-DaniJson
         Test-DaniZonePayload -Direction "UnsecureToNative" -Domain $Domain -Envelope $parsed | Out-Null
 
         return [PSCustomObject]@{

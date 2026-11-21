@@ -1,9 +1,10 @@
-#Requires -Version 7.4
+#Requires -Version 7.0
 using namespace System.IO
 using namespace System.Security.Cryptography
 using namespace System.Collections.Generic
 
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'Compat.ps1')
 
 function Get-DaniFileSha256 {
     [CmdletBinding()]
@@ -13,7 +14,7 @@ function Get-DaniFileSha256 {
     $stream = [File]::OpenRead($FilePath)
     try {
         $hashBytes = $sha256.ComputeHash($stream)
-        return [Convert]::ToHexString($hashBytes).ToLowerInvariant()
+        return ConvertTo-DaniHex $hashBytes
     }
     finally {
         $stream.Dispose()
@@ -176,7 +177,7 @@ function Commit-DaniKernelTransaction {
     foreach ($tier in @("tier_1_active", "tier_3_baseline")) {
         $statePath = Join-Path $ParallelPartitionRoot "$tier\state.json"
         if (Test-Path $statePath) {
-            $stateObj = Get-Content -Path $statePath -Raw | ConvertFrom-Json -AsHashtable
+            $stateObj = Get-Content -Path $statePath -Raw | ConvertFrom-DaniJson
             if (-not $stateObj.ContainsKey("integrityBaselines") -or $null -eq $stateObj.integrityBaselines) {
                 $stateObj["integrityBaselines"] = @{}
             }
@@ -278,7 +279,7 @@ function Test-DaniNativePerimeterIntegrity {
         return [PSCustomObject]@{ Clean = $true; Checked = 0; Drifted = @() }
     }
 
-    $stateObj  = Get-Content -Path $t3StatePath -Raw | ConvertFrom-Json -AsHashtable
+    $stateObj  = Get-Content -Path $t3StatePath -Raw | ConvertFrom-DaniJson
     $baselines = $stateObj["integrityBaselines"]
     if ($null -eq $baselines -or $baselines.Count -eq 0) {
         return [PSCustomObject]@{ Clean = $true; Checked = 0; Drifted = @() }

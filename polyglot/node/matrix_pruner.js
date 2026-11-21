@@ -40,7 +40,7 @@ function parseJournalMarkdown(rawMd) {
 
 function serializeJournalMarkdown(header, entries) {
   const baseHeader = header && header.trim().length > 0 ? header.trim() : "# DaniOs Run Journal";
-  const body = entries.map((e) => e.raw || `- **[${e.timestamp}] [${e.category]}]** ${e.message}`).join("\n");
+  const body = entries.map((e) => e.raw || `- **[${e.timestamp}] [${e.category}]]** ${e.message}`).join("\n");
   return body.length > 0 ? `${baseHeader}\n\n${body}\n` : `${baseHeader}\n`;
 }
 

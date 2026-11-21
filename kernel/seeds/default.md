@@ -1,5 +1,5 @@
 # DaniOs Kernel Golden Journal (Absolute Default)
-- **Kernel Architecture:** Self-contained PowerShell 7.4+ (.NET DLL Host) + In-Process SLM (`DaniOs.Kernel.AI.dll`)
+- **Kernel Architecture:** PowerShell 7 (.NET) orchestrating isolated polyglot workers
 - **Memory Topology:** Parallel 3x3 Firewall Matrix (`.md`, `.yml`, `.json` x 3 Tiers) encompassing Native FS
 - **Trust Boundary:** Native Zone (0-2) strictly isolated from Unsecure Polyglot Edge (Zone 3: Node.js, PHP, Python)
 

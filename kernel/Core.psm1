@@ -1,9 +1,10 @@
-#Requires -Version 7.4
+#Requires -Version 7.0
 using namespace System.IO
 using namespace System.Security.AccessControl
 using namespace System.Security.Principal
 
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'Compat.ps1')
 
 $script:ActiveWorkers = @{}
 $script:KernelRunning = $false
@@ -12,20 +13,20 @@ function Mount-DaniParallelFirewallPartition {
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$Config)
 
-    $defaultPath = if ($IsWindows) {
+    $defaultPath = if (([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)) {
         Join-Path $env:ProgramData "DaniOs\.parallel_3x3_firewall"
     }
     else {
         "/var/lib/danios/.parallel_3x3_firewall"
     }
 
-    $partitionRoot = $Config.memoryMatrix.parallelPartitionPath ?? $defaultPath
+    $partitionRoot = $(if ($Config.ContainsKey("memoryMatrix") -and $null -ne $Config.memoryMatrix -and $Config.memoryMatrix.ContainsKey("parallelPartitionPath") -and $null -ne $Config.memoryMatrix.parallelPartitionPath) { $Config.memoryMatrix.parallelPartitionPath } else { $defaultPath })
 
     if (-not (Test-Path $partitionRoot)) {
         New-Item -ItemType Directory -Path $partitionRoot -Force | Out-Null
     }
 
-    if ($IsWindows) {
+    if (([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)) {
         $acl = Get-Acl -Path $partitionRoot
         $acl.SetAccessRuleProtection($true, $false)
 
@@ -58,7 +59,7 @@ function Update-DaniBootGeneration {
 
     foreach ($tier in @("tier_1_active", "tier_2_rolling", "tier_3_baseline")) {
         $statePath = Join-Path $ParallelPartitionRoot "$tier\state.json"
-        $stateObj  = Get-Content -Path $statePath -Raw | ConvertFrom-Json -AsHashtable
+        $stateObj  = Get-Content -Path $statePath -Raw | ConvertFrom-DaniJson
 
         $stateObj.bootGeneration = $Generation
         $stateObj.lastBootUtc    = (Get-Date).ToUniversalTime().ToString("o")
@@ -99,8 +100,8 @@ function Start-DaniPolyglotWorkers {
             Executable = "node"
             EntryPoint = Join-Path $DaniRoot "polyglot\node\bridge_daemon.js"
             PipeName   = "DaniOs.Pipe.Node"
-            HttpPort   = [string]($Config.desktopBrowserIntegration.httpPort ?? 4110)
-            WsPort     = [string]($Config.desktopBrowserIntegration.wsPort ?? 4111)
+            HttpPort   = [string]($(if ($Config.ContainsKey("desktopBrowserIntegration") -and $null -ne $Config.desktopBrowserIntegration -and $Config.desktopBrowserIntegration.ContainsKey("httpPort") -and $null -ne $Config.desktopBrowserIntegration.httpPort) { $Config.desktopBrowserIntegration.httpPort } else { 4110 }))
+            WsPort     = [string]($(if ($Config.ContainsKey("desktopBrowserIntegration") -and $null -ne $Config.desktopBrowserIntegration -and $Config.desktopBrowserIntegration.ContainsKey("wsPort") -and $null -ne $Config.desktopBrowserIntegration.wsPort) { $Config.desktopBrowserIntegration.wsPort } else { 4111 }))
         }
         PHP = @{
             Executable = "php"
@@ -110,7 +111,7 @@ function Start-DaniPolyglotWorkers {
             WsPort     = ""
         }
         Python = @{
-            Executable = if ($IsWindows) { "python" } else { "python3" }
+            Executable = if (([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)) { "python" } else { "python3" }
             EntryPoint = Join-Path $DaniRoot "polyglot\python\bridge_server.py"
             PipeName   = "DaniOs.Pipe.Python"
             HttpPort   = ""
@@ -131,14 +132,14 @@ function Start-DaniPolyglotWorkers {
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError  = $true
 
-        $psi.Environment["DANIOS_TRUST_ZONE"]    = "UNSECURE_EDGE"
-        $psi.Environment["DANIOS_DOMAIN"]        = $domain.ToUpperInvariant()
-        $psi.Environment["DANIOS_PIPE_NAME"]     = $spec.PipeName
-        $psi.Environment["DANIOS_SESSION_NONCE"] = $SessionNonce
-        if ($spec.HttpPort) { $psi.Environment["DANIOS_HTTP_PORT"] = $spec.HttpPort }
-        if ($spec.WsPort)   { $psi.Environment["DANIOS_WS_PORT"]   = $spec.WsPort }
+        $psi.EnvironmentVariables["DANIOS_TRUST_ZONE"]    = "UNSECURE_EDGE"
+        $psi.EnvironmentVariables["DANIOS_DOMAIN"]        = $domain.ToUpperInvariant()
+        $psi.EnvironmentVariables["DANIOS_PIPE_NAME"]     = $spec.PipeName
+        $psi.EnvironmentVariables["DANIOS_SESSION_NONCE"] = $SessionNonce
+        if ($spec.HttpPort) { $psi.EnvironmentVariables["DANIOS_HTTP_PORT"] = $spec.HttpPort }
+        if ($spec.WsPort)   { $psi.EnvironmentVariables["DANIOS_WS_PORT"]   = $spec.WsPort }
 
-        $psi.Environment.Remove("DANIOS_CLOUD_SECRET") | Out-Null
+        $psi.EnvironmentVariables.Remove("DANIOS_CLOUD_SECRET")
 
         $proc = [System.Diagnostics.Process]::Start($psi)
         $script:ActiveWorkers[$domain] = @{
@@ -162,7 +163,7 @@ function Stop-DaniPolyglotWorkers {
         $proc  = $entry.Process
         if ($null -ne $proc -and -not $proc.HasExited) {
             try {
-                $proc.Kill($true)
+                $proc.Kill()
                 $proc.WaitForExit(1500) | Out-Null
             }
             catch {
@@ -180,7 +181,7 @@ function Invoke-DaniMatrixExpansionAndPrune {
         [Parameter(Mandatory)][hashtable]$Config
     )
 
-    $maxEntries = [int]($Config.memoryMatrix.maxJournalEntriesPerTier ?? 50)
+    $maxEntries = if ($Config.memoryMatrix.maxJournalEntriesPerTier) { [int]$Config.memoryMatrix.maxJournalEntriesPerTier } else { 50 }
     $payload    = @{ maxEntriesPerTier = $maxEntries; tiers = @{} }
 
     foreach ($tier in @("tier_1_active", "tier_2_rolling", "tier_3_baseline")) {
@@ -247,16 +248,16 @@ function Invoke-DaniSelfHeal {
 
     if ($domain -in @("Node", "PHP", "Python") -and $script:ActiveWorkers.ContainsKey($domain)) {
         $entry    = $script:ActiveWorkers[$domain]
-        $maxRetry = [int]($Config.kernel.maxAutonomousRetries ?? 3)
+        $maxRetry = if ($Config.kernel.maxAutonomousRetries) { [int]$Config.kernel.maxAutonomousRetries } else { 3 }
 
         if ($entry.Restarts -lt $maxRetry) {
-            if (-not $entry.Process.HasExited) { $entry.Process.Kill($true) }
+            if (-not $entry.Process.HasExited) { $entry.Process.Kill() }
             $newProc = [System.Diagnostics.Process]::Start($entry.Process.StartInfo)
             $entry.Process    = $newProc
             $entry.Restarts  += 1
             $entry.StartedUtc = (Get-Date).ToUniversalTime()
 
-            $resolutionNote = $knownFix ?? $aiAdvice ?? "Respawned '$domain' worker (attempt $($entry.Restarts)/$maxRetry)."
+            $resolutionNote = if ($knownFix) { $knownFix } elseif ($aiAdvice) { $aiAdvice } else { "Respawned '$domain' worker (attempt $($entry.Restarts)/$maxRetry)." }
             Write-DaniJournalEntry -ParallelPartitionRoot $ParallelPartitionRoot -Tier "tier_1_active" -Category "HEALED" -Message $resolutionNote
 
             $t1Solutions = Join-Path $ParallelPartitionRoot "tier_1_active\solutions.yml"
@@ -295,7 +296,7 @@ function Start-DaniKernelSupervisor {
         [Parameter(Mandatory)][string]$SessionNonce
     )
 
-    $intervalMs           = [int]($Config.kernel.heartbeatIntervalMs ?? 1500)
+    $intervalMs           = if ($Config.kernel.heartbeatIntervalMs) { [int]$Config.kernel.heartbeatIntervalMs } else { 1500 }
     $script:KernelRunning = $true
     $tickCounter          = 0
 

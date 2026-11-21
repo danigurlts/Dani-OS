@@ -55,8 +55,8 @@
     }
 
     CloudOriginContract = @{
-        CompressionAlgorithm = "Brotli"
-        EncryptionCipher     = "AES-256-GCM"
+        CompressionAlgorithm = "GZip"
+        EncryptionCipher     = "AES-256-CBC+HMAC-SHA256"
         AuthHeaderPrefix     = "X-DaniOs-"
         RequiredHeaders      = @("X-DaniOs-Fingerprint", "X-DaniOs-Timestamp", "X-DaniOs-Body-SHA256", "X-DaniOs-Signature")
     }

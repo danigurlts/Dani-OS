@@ -1,10 +1,11 @@
-#Requires -Version 7.4
+#Requires -Version 7.0
 using namespace System.IO
 using namespace System.IO.Compression
 using namespace System.Text
 using namespace System.Security.Cryptography
 
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'Compat.ps1')
 
 function Get-DaniDeviceFingerprint {
     [CmdletBinding()]
@@ -15,7 +16,7 @@ function Get-DaniDeviceFingerprint {
 
     $signals = [System.Collections.Generic.List[string]]::new()
 
-    if ($IsWindows) {
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
         try {
             $csUuid   = (Get-CimInstance -ClassName Win32_ComputerSystemProduct -ErrorAction Stop).UUID
             $cpuId    = (Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1).ProcessorId
@@ -50,7 +51,7 @@ function Get-DaniDeviceFingerprint {
 
     try {
         $fpBytes     = $sha256.ComputeHash([Encoding]::UTF8.GetBytes($rawComposite))
-        $fingerprint = [Convert]::ToHexString($fpBytes).ToLowerInvariant()
+        $fingerprint = ConvertTo-DaniHex $fpBytes
         $keyMaterial = $sha256.ComputeHash([Encoding]::UTF8.GetBytes("${fingerprint}:${AccountSecret}"))
 
         return [PSCustomObject]@{
@@ -73,24 +74,19 @@ function Protect-DaniSavePointPayload {
 
     $rawBytes         = [Encoding]::UTF8.GetBytes($JsonPayload)
     $compressedStream = [MemoryStream]::new()
-    $brotli           = [BrotliStream]::new($compressedStream, [CompressionLevel]::Optimal, $true)
-    $brotli.Write($rawBytes, 0, $rawBytes.Length)
-    $brotli.Dispose()
+    $gzip             = [System.IO.Compression.GZipStream]::new($compressedStream, [System.IO.Compression.CompressionMode]::Compress, $true)
+    $gzip.Write($rawBytes, 0, $rawBytes.Length)
+    $gzip.Dispose()
     $compressedBytes  = $compressedStream.ToArray()
     $compressedStream.Dispose()
 
-    $nonce      = [RandomNumberGenerator]::GetBytes(12)
-    $tag        = [byte[]]::new(16)
-    $cipherText = [byte[]]::new($compressedBytes.Length)
-
-    $aesGcm = [AesGcm]::new($KeyBytes, 16)
-    try {
-        $aesGcm.Encrypt($nonce, $compressedBytes, $cipherText, $tag)
-    }
-    finally {
-        $aesGcm.Dispose()
-    }
-
+    
+    $nonce = New-DaniRandomBytes 12
+    $cipherText = New-Object byte[] $compressedBytes.Length
+    $tag = New-Object byte[] 16
+    $aesGcm = [AesGcm]::new($KeyBytes)
+    try { $aesGcm.Encrypt($nonce, $compressedBytes, $cipherText, $tag) }
+    finally { $aesGcm.Dispose() }
     return [PSCustomObject]@{
         NonceB64      = [Convert]::ToBase64String($nonce)
         TagB64        = [Convert]::ToBase64String($tag)
@@ -112,26 +108,23 @@ function Unprotect-DaniSavePointPayload {
     $nonce      = [Convert]::FromBase64String($NonceB64)
     $tag        = [Convert]::FromBase64String($TagB64)
     $cipherText = [Convert]::FromBase64String($CipherTextB64)
-    $plainComp  = [byte[]]::new($cipherText.Length)
-
-    $aesGcm = [AesGcm]::new($KeyBytes, 16)
-    try {
-        $aesGcm.Decrypt($nonce, $cipherText, $tag, $plainComp)
-    }
-    finally {
-        $aesGcm.Dispose()
-    }
+    if ($nonce.Length -ne 12 -or $tag.Length -ne 16) { throw 'SecurityFault [CloudPayloadAuthenticationFailed].' }
+    $plainComp = New-Object byte[] $cipherText.Length
+    $aesGcm = [AesGcm]::new($KeyBytes)
+    try { $aesGcm.Decrypt($nonce, $cipherText, $tag, $plainComp) }
+    catch { throw 'SecurityFault [CloudPayloadAuthenticationFailed].' }
+    finally { $aesGcm.Dispose() }
 
     $inStream  = [MemoryStream]::new($plainComp)
     $outStream = [MemoryStream]::new()
-    $brotli    = [BrotliStream]::new($inStream, [CompressionMode]::Decompress)
+    $gzip      = [System.IO.Compression.GZipStream]::new($inStream, [System.IO.Compression.CompressionMode]::Decompress)
 
     try {
-        $brotli.CopyTo($outStream)
+        $gzip.CopyTo($outStream)
         return [Encoding]::UTF8.GetString($outStream.ToArray())
     }
     finally {
-        $brotli.Dispose()
+        $gzip.Dispose()
         $inStream.Dispose()
         $outStream.Dispose()
     }
@@ -152,7 +145,7 @@ function New-DaniSignatureHeaders {
     $hmac = [HMACSHA256]::new([Encoding]::UTF8.GetBytes($AccountSecret))
     try {
         $sigBytes  = $hmac.ComputeHash([Encoding]::UTF8.GetBytes($canonical))
-        $signature = [Convert]::ToHexString($sigBytes).ToLowerInvariant()
+        $signature = ConvertTo-DaniHex $sigBytes
 
         return @{
             "X-DaniOs-Fingerprint" = $Fingerprint
@@ -208,7 +201,7 @@ function Sync-DaniCloudSavePoint {
     } | ConvertTo-Json -Depth 4 -Compress
 
     $sha256      = [SHA256]::Create()
-    $bodyHashHex = [Convert]::ToHexString($sha256.ComputeHash([Encoding]::UTF8.GetBytes($wireBody))).ToLowerInvariant()
+    $bodyHashHex = ConvertTo-DaniHex ($sha256.ComputeHash([Encoding]::UTF8.GetBytes($wireBody)))
     $sha256.Dispose()
 
     $headers = New-DaniSignatureHeaders `
@@ -263,7 +256,7 @@ function Restore-DaniCloudSavePoint {
 
     $identity  = Get-DaniDeviceFingerprint -AccountSecret $CloudConfig.accountSecret -KernelSalt $CloudConfig.kernelSalt
     $sha256    = [SHA256]::Create()
-    $emptyHash = [Convert]::ToHexString($sha256.ComputeHash([byte[]]@())).ToLowerInvariant()
+    $emptyHash = ConvertTo-DaniHex ($sha256.ComputeHash([byte[]]@()))
     $sha256.Dispose()
 
     $headers = New-DaniSignatureHeaders `
@@ -288,7 +281,7 @@ function Restore-DaniCloudSavePoint {
             -CipherTextB64 $envelope.ciphertext `
             -KeyBytes $identity.DerivedKey
 
-        $bundle = $decryptedJson | ConvertFrom-Json -AsHashtable
+        $bundle = $decryptedJson | ConvertFrom-DaniJson
 
         if ($bundle.fingerprint -ne $identity.Fingerprint) {
             throw "FingerprintMismatch: Cloud save point does not match local hardware identity."

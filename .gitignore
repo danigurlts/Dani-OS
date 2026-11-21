@@ -2,6 +2,7 @@
 config/kernel.config.json
 cloud-origin/vault.config.json
 cloud-origin/vault_data/
+.codex
 
 # Compiled .NET/PowerShell kernel binaries & native inference DLLs
 kernel/bin/*.dll
@@ -24,3 +25,6 @@ kernel/models/*.onnx
 polyglot/node/node_modules/
 polyglot/python/__pycache__/
 .parallel_3x3_firewall/
+
+# Drive uploads
+.tmp.driveupload

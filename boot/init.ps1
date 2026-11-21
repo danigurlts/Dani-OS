@@ -1,4 +1,4 @@
-#Requires -Version 7.4
+#Requires -Version 7.0
 [CmdletBinding()]
 param(
     [string]$ConfigPath = (Join-Path $PSScriptRoot "..\config\kernel.config.json"),
@@ -10,37 +10,31 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $DaniRoot  = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+. (Join-Path $DaniRoot "kernel\Compat.ps1")
 $KernelDir = Join-Path $DaniRoot "kernel"
-$BinDir    = Join-Path $KernelDir "bin"
 $ModelDir  = Join-Path $KernelDir "models"
 
 Write-Host "[DaniOs::Boot] Initializing self-contained PowerShell + AI Kernel..." -ForegroundColor Cyan
 
-$hostDll = Join-Path $BinDir "DaniOs.Kernel.Host.dll"
-$aiDll   = Join-Path $BinDir "DaniOs.Kernel.AI.dll"
-
-foreach ($dll in @($hostDll, $aiDll)) {
-    if (Test-Path $dll) {
-        Add-Type -Path $dll
-        Write-Host "[DaniOs::Boot] Loaded kernel assembly: $(Split-Path $dll -Leaf)" -ForegroundColor DarkCyan
-    }
-}
+Write-Host "[DaniOs::Boot] PowerShell 7 mode." -ForegroundColor DarkCyan
 
 if (-not (Test-Path $ConfigPath)) {
     throw "FATAL KERNEL PANIC: Missing kernel configuration at '$ConfigPath'."
 }
-$Config   = Get-Content -Path $ConfigPath -Raw | ConvertFrom-Json -AsHashtable
+$Config   = Get-Content -Path $ConfigPath -Raw | ConvertFrom-DaniJson
 $Manifest = Import-PowerShellDataFile -Path (Join-Path $PSScriptRoot "manifest.psd1")
 
 if ($Manifest.ParallelMemoryMatrix.ExpectedNodeCount -ne 9) {
     throw "FATAL KERNEL PANIC: Manifest 3x3 topology mismatch."
 }
 
-$modelFile = Join-Path $ModelDir ($Config.ai.modelFile ?? "danios-core-3b.Q4_K_M.gguf")
-$aiType = [System.Type]::GetType("DaniOs.Kernel.AI, DaniOs.Kernel.AI")
+$modelName = if ($Config.ai.modelFile) { $Config.ai.modelFile } else { "danios-core-3b.Q4_K_M.gguf" }
+$modelFile = Join-Path $ModelDir $modelName
+$aiType = $null
 if ($null -ne $aiType -and (Test-Path $modelFile)) {
     try {
-        $aiReady = [DaniOs.Kernel.AI]::Initialize($modelFile, [int]($Config.ai.contextTokens ?? 4096))
+        $contextTokens = if ($Config.ai.contextTokens) { [int]$Config.ai.contextTokens } else { 4096 }
+        $aiReady = [DaniOs.Kernel.AI]::Initialize($modelFile, $contextTokens)
         if (-not $aiReady) {
             Write-Warning "[DaniOs::Boot] Embedded AI DLL could not mount model '$modelFile'. Continuing in deterministic fallback mode."
         }
@@ -68,9 +62,10 @@ $matrixState   = Initialize-DaniGoldenMatrix -ParallelPartitionRoot $partitionRo
 Write-Host "[DaniOs::Boot] Parallel 3x3 Firewall Partition mounted ($($matrixState.ActiveNodes) nodes active)." -ForegroundColor Green
 
 $t3StatePath = Join-Path $partitionRoot "tier_3_baseline\state.json"
-$t3State     = Get-Content -Path $t3StatePath -Raw | ConvertFrom-Json -AsHashtable
+$t3State     = Get-Content -Path $t3StatePath -Raw | ConvertFrom-DaniJson
 
-$isZeroGen  = ([int]($t3State.bootGeneration ?? 0)) -eq 0
+$bootGeneration = if ($t3State.bootGeneration) { [int]$t3State.bootGeneration } else { 0 }
+$isZeroGen  = $bootGeneration -eq 0
 $shouldPull = $ForceCloudRestore -or ($isZeroGen -and $Config.cloudOrigin.enabled -and $Config.cloudOrigin.autoRestoreOnZeroGeneration)
 
 if ($shouldPull) {
@@ -81,14 +76,15 @@ if ($shouldPull) {
 
     if ($restoreResult.Ok) {
         Write-Host "[DaniOs::Boot] Cloud save point restored (SavedAt: $($restoreResult.SavedAtUtc))." -ForegroundColor Green
-        $t3State = Get-Content -Path $t3StatePath -Raw | ConvertFrom-Json -AsHashtable
+        $t3State = Get-Content -Path $t3StatePath -Raw | ConvertFrom-DaniJson
     }
     else {
         Write-Warning "[DaniOs::Boot] Cloud restore unavailable ($($restoreResult.Error)). Continuing on Golden Seeds."
     }
 }
 
-$nextGen = ([int]($t3State.bootGeneration ?? 0)) + 1
+$bootGeneration = if ($t3State.bootGeneration) { [int]$t3State.bootGeneration } else { 0 }
+$nextGen = $bootGeneration + 1
 Update-DaniBootGeneration -ParallelPartitionRoot $partitionRoot -Generation $nextGen -SessionNonce $matrixState.BrowserSession
 Write-DaniJournalEntry -ParallelPartitionRoot $partitionRoot -Tier "tier_1_active" -Category "BOOT" -Message "DaniOs booted cleanly into Generation #$nextGen (CloudRestore=$shouldPull)."
 

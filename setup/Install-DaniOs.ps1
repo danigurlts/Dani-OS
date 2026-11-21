@@ -1,4 +1,4 @@
-#Requires -Version 7.4
+#Requires -Version 7.0
 using namespace System.IO
 using namespace System.Security.AccessControl
 using namespace System.Security.Principal
@@ -20,6 +20,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $DaniRoot       = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+. (Join-Path $DaniRoot "kernel\Compat.ps1")
 $BootDir        = Join-Path $DaniRoot "boot"
 $KernelDir      = Join-Path $DaniRoot "kernel"
 $KernelBinDir   = Join-Path $KernelDir "bin"
@@ -43,16 +44,13 @@ function Test-RuntimeRequirement {
 }
 
 function Get-TargetRuntimeIdentifier {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
-    if ($IsWindows) { return "win-$arch" }
-    if ($IsLinux)   { return "linux-$arch" }
-    if ($IsMacOS)   { return "osx-$arch" }
-    return "win-x64"
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) { return "win-x64" }
+    throw "This installer targets PowerShell 7 and Windows only."
 }
 
 function Set-KernelOnlyFileAcl {
     param([string]$FilePath)
-    if ($IsWindows) {
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
         try {
             $acl = Get-Acl -Path $FilePath
             $acl.SetAccessRuleProtection($true, $false)
@@ -69,7 +67,6 @@ function Set-KernelOnlyFileAcl {
 
 $pythonCmd = if (Get-Command "python3" -ErrorAction SilentlyContinue) { "python3" } else { "python" }
 $checks = @(
-    (Test-RuntimeRequirement -Name ".NET SDK" -Command "dotnet"   -VersionArgs @("--version")               -MinVersion ([version]"8.0.0")  -InstallHint "Install .NET 8.0 SDK"),
     (Test-RuntimeRequirement -Name "Node.js"  -Command "node"     -VersionArgs @("--version")               -MinVersion ([version]"22.0.0") -InstallHint "Install Node.js 22+"),
     (Test-RuntimeRequirement -Name "PHP CLI"  -Command "php"      -VersionArgs @("-r", "echo PHP_VERSION;") -MinVersion ([version]"8.3.0")  -InstallHint "Install PHP 8.3+ CLI"),
     (Test-RuntimeRequirement -Name "Python"   -Command $pythonCmd -VersionArgs @("--version")               -MinVersion ([version]"3.11.0") -InstallHint "Install Python 3.11+")
@@ -83,27 +80,6 @@ if ($missingOrOld.Count -gt 0) {
 
 New-Item -ItemType Directory -Path $KernelBinDir, (Join-Path $KernelBinDir "native"), $KernelModelDir, $NativeZoneDir -Force | Out-Null
 
-$bootProj     = Join-Path $BootDir "DaniOs.Boot\DaniOs.Boot.csproj"
-$rid          = Get-TargetRuntimeIdentifier
-$bootExeName  = if ($IsWindows) { "DaniOs.Boot.exe" } else { "DaniOs.Boot" }
-$finalBootExe = Join-Path $BootDir $bootExeName
-
-if (-not $SkipDotNetBuild) {
-    if (-not (Test-Path $bootProj)) {
-        throw "Missing boot project: '$bootProj'. Add boot/DaniOs.Boot/DaniOs.Boot.csproj before running installation."
-    }
-
-    & dotnet publish $bootProj -c Release -r $rid --self-contained true -o $KernelBinDir --nologo
-    if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
-
-    $publishedBootExe = Join-Path $KernelBinDir $bootExeName
-    if (-not (Test-Path $publishedBootExe)) {
-        throw "Boot publish succeeded but no executable was produced at '$publishedBootExe'."
-    }
-
-    Move-Item -Path $publishedBootExe -Destination $finalBootExe -Force
-    if (-not $IsWindows) { & chmod +x $finalBootExe }
-}
 
 if (-not $SkipNpmInstall -and (Test-Path (Join-Path $NodePolyDir "package.json"))) {
     & npm install --prefix $NodePolyDir --no-audit --no-fund --loglevel=error
@@ -113,14 +89,14 @@ $exampleConfigPath = Join-Path $ConfigDir "kernel.config.example.json"
 $liveConfigPath    = Join-Path $ConfigDir "kernel.config.json"
 if (-not (Test-Path $liveConfigPath)) { Copy-Item -Path $exampleConfigPath -Destination $liveConfigPath -Force }
 
-$Config = Get-Content -Path $liveConfigPath -Raw | ConvertFrom-Json -AsHashtable
+$Config = Get-Content -Path $liveConfigPath -Raw | ConvertFrom-DaniJson
 if ($ParallelPartitionPath) { $Config.memoryMatrix.parallelPartitionPath = $ParallelPartitionPath }
 if ($CloudOriginUrl)        { $Config.cloudOrigin.originUrl = $CloudOriginUrl }
 
 if ($AccountSecret) {
     $Config.cloudOrigin.accountSecret = $AccountSecret
 } elseif ($Config.cloudOrigin.accountSecret -eq "REPLACE_WITH_PROVISIONED_ACCOUNT_SECRET") {
-    $Config.cloudOrigin.accountSecret = [Convert]::ToHexString([RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
+    $Config.cloudOrigin.accountSecret = ConvertTo-DaniHex (New-DaniRandomBytes 32)
 }
 
 $Config | ConvertTo-Json -Depth 10 | Set-Content -Path $liveConfigPath -Encoding UTF8 -Force
@@ -137,11 +113,4 @@ if (-not $SkipVerification) {
     & (Join-Path $DaniRoot "tests\Simulate-KernelFault.ps1")
 }
 
-if ($BootAfterInstall) {
-    if (Test-Path $finalBootExe) {
-        & $finalBootExe -Headless
-    }
-    else {
-        & (Join-Path $BootDir "init.ps1") -ConfigPath $liveConfigPath -Headless
-    }
-}
+if ($BootAfterInstall) { & (Join-Path $BootDir "init.ps1") -ConfigPath $liveConfigPath -Headless }

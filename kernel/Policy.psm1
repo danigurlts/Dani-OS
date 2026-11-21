@@ -1,4 +1,4 @@
-function Get-RealCanonicalPath {
+﻿function Get-RealCanonicalPath {
     param([string]$Path)
     try {
         $fullPath = [System.IO.Path]::GetFullPath($Path)
@@ -13,12 +13,12 @@ function Get-RealCanonicalPath {
             $candidate = [System.IO.Path]::Combine($currentResolved, $seg)
             if (Test-Path $candidate -PathType Leaf) {
                 $fileInfo = [System.IO.FileInfo]::new($candidate)
-                $link = $fileInfo.ResolveLinkTarget($true)
-                $currentResolved = if ($null -ne $link) { $link.FullName } else { $fileInfo.FullName }
+                if (($fileInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Reparse points are not allowed in protected paths." }
+                $currentResolved = $fileInfo.FullName
             } elseif (Test-Path $candidate -PathType Container) {
                 $dirInfo = [System.IO.DirectoryInfo]::new($candidate)
-                $link = $dirInfo.ResolveLinkTarget($true)
-                $currentResolved = if ($null -ne $link) { $link.FullName } else { $dirInfo.FullName }
+                if (($dirInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Reparse points are not allowed in protected paths." }
+                $currentResolved = $dirInfo.FullName
             } else {
                 $currentResolved = [System.IO.Path]::Combine($currentResolved, $seg)
             }
