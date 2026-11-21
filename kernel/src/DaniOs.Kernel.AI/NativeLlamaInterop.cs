@@ -7,7 +7,7 @@ internal static unsafe class NativeLlamaInterop
     private const string LibName = "llama";
     private static bool _resolverRegistered;
 
-    public static void EnsureNativeResolver(string kernelBinDir)
+    public static void EnsureNativeResolver(string kernelBinDir, string? configuredNativeDirectory = null)
     {
         if (_resolverRegistered) return;
         _resolverRegistered = true;
@@ -23,13 +23,34 @@ internal static unsafe class NativeLlamaInterop
                     ? "libllama.dylib"
                     : "libllama.so";
 
-            string nativeCandidate = Path.Combine(kernelBinDir, "native", fileName);
-            if (File.Exists(nativeCandidate) && NativeLibrary.TryLoad(nativeCandidate, out IntPtr handle))
-                return handle;
+            for (DirectoryInfo? current = new(Path.GetFullPath(kernelBinDir)); current is not null; current = current.Parent)
+            {
+                var candidateDirectories = new List<string>();
+                if (!string.IsNullOrWhiteSpace(configuredNativeDirectory))
+                {
+                    candidateDirectories.Add(Path.IsPathRooted(configuredNativeDirectory)
+                        ? configuredNativeDirectory
+                        : Path.Combine(current.FullName, configuredNativeDirectory));
+                }
+                candidateDirectories.Add(Path.Combine(current.FullName, "native"));
+
+                foreach (string directory in candidateDirectories.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    string nativeCandidate = Path.Combine(directory, fileName);
+                    if (File.Exists(nativeCandidate) && NativeLibrary.TryLoad(nativeCandidate, out IntPtr handle))
+                        return handle;
+                }
+            }
 
             return IntPtr.Zero;
         });
     }
+
+    public const int LoadModeMmap = 1;
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public delegate bool LlamaProgressCallback(float progress, IntPtr userData);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct LlamaModelParams
@@ -38,15 +59,19 @@ internal static unsafe class NativeLlamaInterop
         public IntPtr TensorBuftOverrides;
         public int NGpuLayers;
         public int SplitMode;
+        public int LoadMode;
+        public int LazyMode;
         public int MainGpu;
         public IntPtr TensorSplit;
         public IntPtr ProgressCallback;
         public IntPtr ProgressCallbackUserData;
         public IntPtr KvOverrides;
         [MarshalAs(UnmanagedType.I1)] public bool VocabOnly;
-        [MarshalAs(UnmanagedType.I1)] public bool UseMmap;
-        [MarshalAs(UnmanagedType.I1)] public bool UseMlock;
         [MarshalAs(UnmanagedType.I1)] public bool CheckTensors;
+        [MarshalAs(UnmanagedType.I1)] public bool UseExtraBufts;
+        [MarshalAs(UnmanagedType.I1)] public bool NoHost;
+        [MarshalAs(UnmanagedType.I1)] public bool NoAlloc;
+        [MarshalAs(UnmanagedType.I1)] public bool LoadMtp;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -56,11 +81,16 @@ internal static unsafe class NativeLlamaInterop
         public uint NBatch;
         public uint NUbatch;
         public uint NSeqMax;
+        public uint NRsSeq;
+        public uint NOutputsMax;
+        public uint NOutputsMaxPerSeq;
         public int NThreads;
         public int NThreadsBatch;
+        public int CtxType;
         public int RopeScalingType;
         public int PoolingType;
         public int AttentionType;
+        public int FlashAttnType;
         public float RopeFreqBase;
         public float RopeFreqScale;
         public float YarnExtFactor;
@@ -68,17 +98,23 @@ internal static unsafe class NativeLlamaInterop
         public float YarnBetaFast;
         public float YarnBetaSlow;
         public uint YarnOrigCtx;
-        public float DefragThold;
         public IntPtr CbEval;
         public IntPtr CbEvalUserData;
         public int TypeK;
         public int TypeV;
+        public nuint MoeCacheSize;
+        public float MoeCacheCpuShare;
         public IntPtr AbortCallback;
         public IntPtr AbortCallbackData;
         [MarshalAs(UnmanagedType.I1)] public bool Embeddings;
         [MarshalAs(UnmanagedType.I1)] public bool OffloadKqv;
-        [MarshalAs(UnmanagedType.I1)] public bool FlashAttn;
         [MarshalAs(UnmanagedType.I1)] public bool NoPerf;
+        [MarshalAs(UnmanagedType.I1)] public bool OpOffload;
+        [MarshalAs(UnmanagedType.I1)] public bool SwaFull;
+        [MarshalAs(UnmanagedType.I1)] public bool KvUnified;
+        public IntPtr Samplers;
+        public nuint NSamplers;
+        public IntPtr CtxOther;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -130,6 +166,9 @@ internal static unsafe class NativeLlamaInterop
     public static extern int llama_vocab_eos(IntPtr vocab);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int llama_vocab_n_tokens(IntPtr vocab);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int llama_tokenize(
         IntPtr vocab, byte* text, int textLen, int* tokens, int nTokensMax,
         [MarshalAs(UnmanagedType.I1)] bool addSpecial, [MarshalAs(UnmanagedType.I1)] bool parseSpecial);
@@ -156,6 +195,18 @@ internal static unsafe class NativeLlamaInterop
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern IntPtr llama_sampler_init_greedy();
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr llama_sampler_init_top_p(float p, nuint minKeep);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr llama_sampler_init_penalties(int vocabSize, int penaltyLastN, float repeat, float frequency, float presence);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr llama_sampler_init_temp(float temperature);
+
+    [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr llama_sampler_init_dist(uint seed);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int llama_sampler_sample(IntPtr smpl, IntPtr ctx, int idx);

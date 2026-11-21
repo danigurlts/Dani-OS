@@ -28,13 +28,49 @@ if ($Manifest.ParallelMemoryMatrix.ExpectedNodeCount -ne 9) {
     throw "FATAL KERNEL PANIC: Manifest 3x3 topology mismatch."
 }
 
-$modelName = if ($Config.ai.modelFile) { $Config.ai.modelFile } else { "danios-core-3b.Q4_K_M.gguf" }
-$modelFile = Join-Path $ModelDir $modelName
-$aiType = $null
+$modelName = if ($Config.ai.modelFile) { [string]$Config.ai.modelFile } else { "danios-core-3b.Q4_K_M.gguf" }
+if ([System.IO.Path]::IsPathRooted($modelName)) {
+    $modelFile = [System.IO.Path]::GetFullPath($modelName)
+} elseif (Test-Path (Join-Path $DaniRoot $modelName) -PathType Leaf) {
+    $modelFile = [System.IO.Path]::GetFullPath((Join-Path $DaniRoot $modelName))
+} else {
+    $modelFile = Join-Path $ModelDir $modelName
+}
+
+$aiAssemblyPath = Join-Path $KernelDir "bin\DaniOs.Kernel.AI.dll"
+if (-not [System.Management.Automation.PSTypeName]'DaniOs.Kernel.AI'.Type -and (Test-Path $aiAssemblyPath -PathType Leaf)) {
+    try {
+        [System.Reflection.Assembly]::LoadFrom($aiAssemblyPath) | Out-Null
+    }
+    catch {
+        Write-Warning "[DaniOs::Boot] Could not load AI assembly '$aiAssemblyPath': $($_.Exception.Message)"
+    }
+}
+$aiType = [System.Management.Automation.PSTypeName]'DaniOs.Kernel.AI'.Type
+function Get-DaniAiSetting {
+    param([string]$Name, [object]$Default)
+    $property = $Config.ai.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) { return $Default }
+    return $property.Value
+}
+
 if ($null -ne $aiType -and (Test-Path $modelFile)) {
     try {
-        $contextTokens = if ($Config.ai.contextTokens) { [int]$Config.ai.contextTokens } else { 4096 }
-        $aiReady = [DaniOs.Kernel.AI]::Initialize($modelFile, $contextTokens)
+        $aiOptions = [DaniOs.Kernel.AiRuntimeOptions]::new()
+        $aiOptions.NativeLibraryDirectory = [string](Get-DaniAiSetting "nativeLibraryDirectory" "native")
+        $aiOptions.ContextTokens = [int](Get-DaniAiSetting "contextTokens" 4096)
+        $aiOptions.BatchSize = [int](Get-DaniAiSetting "batchSize" 128)
+        $aiOptions.Threads = [int](Get-DaniAiSetting "threads" 0)
+        $aiOptions.GpuLayers = [int](Get-DaniAiSetting "gpuLayers" 0)
+        $aiOptions.Temperature = [single](Get-DaniAiSetting "temperature" 0.0)
+        $aiOptions.TopP = [single](Get-DaniAiSetting "topP" 0.9)
+        $aiOptions.RepeatPenalty = [single](Get-DaniAiSetting "repeatPenalty" 1.05)
+        $aiOptions.MaxTokens = [int](Get-DaniAiSetting "maxTokens" 96)
+        $aiOptions.MaxOutputCharacters = [int](Get-DaniAiSetting "maxOutputCharacters" 4096)
+        $aiOptions.ModelLoadTimeoutMs = [int](Get-DaniAiSetting "modelLoadTimeoutMs" 120000)
+        $aiOptions.InferenceTimeoutMs = [int](Get-DaniAiSetting "inferenceTimeoutMs" 30000)
+        $aiOptions.FallbackToDeterministicRules = [bool](Get-DaniAiSetting "fallbackToDeterministicRules" $true)
+        $aiReady = [DaniOs.Kernel.AI]::Initialize($modelFile, $aiOptions)
         if (-not $aiReady) {
             Write-Warning "[DaniOs::Boot] Embedded AI DLL could not mount model '$modelFile'. Continuing in deterministic fallback mode."
         }

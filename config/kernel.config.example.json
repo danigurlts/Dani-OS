@@ -12,10 +12,19 @@
   "ai": {
     "provider": "in-kernel-dll",
     "nativeRuntime": "llama.cpp",
-    "modelFile": "danios-core-3b.Q4_K_M.gguf",
+    "modelFile": "kernel/models/Qwen2.5-3B-Instruct-Q5_K_M.gguf",
+    "nativeLibraryDirectory": "native",
     "contextTokens": 4096,
-    "maxDiagnosisTokens": 256,
+    "batchSize": 128,
+    "threads": 3,
     "gpuLayers": 0,
+    "temperature": 0.0,
+    "topP": 0.9,
+    "repeatPenalty": 1.05,
+    "maxTokens": 96,
+    "maxOutputCharacters": 4096,
+    "modelLoadTimeoutMs": 120000,
+    "inferenceTimeoutMs": 30000,
     "fallbackToDeterministicRules": true
   },
   "memoryMatrix": {
