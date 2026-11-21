@@ -3,6 +3,7 @@
 param(
     [string]$ConfigPath = (Join-Path $PSScriptRoot "..\config\kernel.config.json"),
     [switch]$ForceCloudRestore,
+    [switch]$StartLlmServer,
     [switch]$Headless
 )
 
@@ -54,7 +55,7 @@ function Get-DaniAiSetting {
     return $property.Value
 }
 
-if ($null -ne $aiType -and (Test-Path $modelFile)) {
+if (-not $StartLlmServer -and $null -ne $aiType -and (Test-Path $modelFile)) {
     try {
         $aiOptions = [DaniOs.Kernel.AiRuntimeOptions]::new()
         $aiOptions.NativeLibraryDirectory = [string](Get-DaniAiSetting "nativeLibraryDirectory" "native")
@@ -87,6 +88,7 @@ elseif (-not (Test-Path $modelFile)) {
 }
 
 Import-Module (Join-Path $KernelDir "Bridge.psm1")      -Force
+Import-Module (Join-Path $KernelDir "LlmServer.psm1")   -Force
 Import-Module (Join-Path $KernelDir "CloudOrigin.psm1") -Force
 Import-Module (Join-Path $KernelDir "Policy.psm1")      -Force
 Import-Module (Join-Path $KernelDir "Snapshot.psm1")    -Force
@@ -130,6 +132,11 @@ $workers = Start-DaniPolyglotWorkers `
     -SessionNonce $matrixState.BrowserSession
 
 Write-Host "[DaniOs::Boot] Polyglot workers online: $($workers.Keys -join ', ')" -ForegroundColor Green
+
+if ($StartLlmServer) {
+    $llmStatus = Start-DaniLlmServer
+    Write-Host "[DaniOs::Boot] LLM server ready on 127.0.0.1:$($llmStatus.Port) (PID $($llmStatus.ProcessId))." -ForegroundColor Green
+}
 
 if (-not $Headless) {
     Send-DaniBrowserEvent -Channel "kernel:boot" -Data @{

@@ -11,9 +11,9 @@ if ($sessionNonce === '') {
     exit(1);
 }
 
-$webClient = new DaniWebClient($sessionNonce);
+$webClient = new DaniOsWebClient();
 
-function handleEnvelope(string $rawLine, string $sessionNonce, DaniWebClient $webClient): string
+function handleEnvelope(string $rawLine, string $sessionNonce, DaniOsWebClient $webClient): string
 {
     $requestId = null;
     try {
@@ -29,6 +29,7 @@ function handleEnvelope(string $rawLine, string $sessionNonce, DaniWebClient $we
         $payload = is_array($envelope['Payload'] ?? null) ? $envelope['Payload'] : [];
 
         $result = match ($action) {
+            'LlmChat'         => $webClient->llmChat($payload),
             'ExecuteHttpCall' => $webClient->executeHttpCall($payload),
             'DispatchWebhook' => $webClient->dispatchWebhook($payload),
             'BatchHttpProbe'  => $webClient->batchHttpProbe($payload['targets'] ?? []),

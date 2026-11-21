@@ -349,6 +349,11 @@ function Start-DaniKernelSupervisor {
             Sync-DaniCloudSavePoint -ParallelPartitionRoot $ParallelPartitionRoot -CloudConfig $Config.cloudOrigin | Out-Null
         }
 
+        if (Get-Command -Name "Stop-DaniLlmServer" -ErrorAction SilentlyContinue) {
+            try { Stop-DaniLlmServer | Out-Null }
+            catch { Write-Warning "[DaniOs::Core] LLM server stop failed: $($_.Exception.Message)" }
+        }
+
         Stop-DaniPolyglotWorkers
         Write-Host "[DaniOs::Supervisor] DaniOs halted cleanly." -ForegroundColor Cyan
     }

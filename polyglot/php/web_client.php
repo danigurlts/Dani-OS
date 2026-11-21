@@ -2,6 +2,49 @@
 declare(strict_types=1);
 
 class DaniOsWebClient {
+    public static function assertNoRestrictedPartitionPath(string $raw): void {
+        if (preg_match('~[/\\\\](?:tier_[123]_(?:active|rolling|baseline)|kernel[/\\\\]seeds)(?:[/\\\\]|["\\\\])~i', $raw)) {
+            throw new RuntimeException('ZoneBoundaryViolation: Restricted kernel path in PHP request.');
+        }
+    }
+
+    public function llmChat(array $payload): array {
+        $port = filter_var($payload['port'] ?? 9931, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
+        $messages = $payload['messages'] ?? null;
+        if ($port === false || !is_array($messages) || count($messages) < 1 || count($messages) > 64) {
+            throw new RuntimeException('InvalidLlmRequest.');
+        }
+        foreach ($messages as $message) {
+            if (!is_array($message) || !in_array($message['role'] ?? '', ['system', 'user', 'assistant'], true) || !is_string($message['content'] ?? null)) {
+                throw new RuntimeException('InvalidLlmMessage.');
+            }
+        }
+        $body = json_encode([
+            'model' => (string)($payload['model'] ?? 'qwen2.5-3b'),
+            'messages' => $messages,
+            'temperature' => (float)($payload['temperature'] ?? 0),
+            'max_tokens' => max(1, min(4096, (int)($payload['max_tokens'] ?? 96))),
+            'stream' => false,
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        $curl = curl_init("http://127.0.0.1:{$port}/v1/chat/completions");
+        if ($curl === false) throw new RuntimeException('LlmCurlInitFailed.');
+        try {
+            curl_setopt_array($curl, [
+                CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body, CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 180,
+            ]);
+            $response = curl_exec($curl);
+            if ($response === false) throw new RuntimeException('LlmRequestFailed: ' . curl_error($curl));
+            $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+            $decoded = json_decode($response, true, 32, JSON_THROW_ON_ERROR);
+            if ($status < 200 || $status >= 300) throw new RuntimeException("LlmHttpError {$status}: " . substr($response, 0, 1000));
+            return $decoded;
+        } finally {
+            curl_close($curl);
+        }
+    }
+
     public static function assertSafeOutboundUrl(string $url, ?array $allowedHosts = null): array {
         $parts = parse_url($url);
         if ($parts === false || empty($parts['scheme']) || empty($parts['host'])) {
