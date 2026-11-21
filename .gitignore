@@ -13,6 +13,7 @@ kernel/bin/native/*.dll
 kernel/bin/native/*.so
 kernel/bin/native/*.dylib
 native/*.dll
+native/*.exe
 native/*.so
 native/*.dylib
 boot/DaniOs.Boot.exe

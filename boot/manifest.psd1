@@ -24,7 +24,7 @@
         AISettingsDefaults = @{
             provider                     = "in-kernel-dll"
             nativeRuntime                = "llama.cpp"
-            modelFile                    = "kernel/models/Qwen2.5-3B-Instruct-Q5_K_M.gguf"
+            modelFile                    = "kernel/models/qwen2.5-3b-instruct-q5_k_m.gguf"
             nativeLibraryDirectory       = "native"
             contextTokens                = 4096
             batchSize                    = 128

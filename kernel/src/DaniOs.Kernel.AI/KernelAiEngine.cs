@@ -80,6 +80,9 @@ public static unsafe class AI
             bool backendInitialized = false;
             try
             {
+                string nativeDirectory = NativeLlamaInterop.ResolveNativeDirectory(binDir, options.NativeLibraryDirectory);
+                if (NativeLlamaInterop.ggml_backend_reg_count() == UIntPtr.Zero)
+                    NativeLlamaInterop.ggml_backend_load_all_from_path(nativeDirectory);
                 NativeLlamaInterop.llama_backend_init();
                 backendInitialized = true;
 

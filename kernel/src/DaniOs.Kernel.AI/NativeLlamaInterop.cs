@@ -14,14 +14,16 @@ internal static unsafe class NativeLlamaInterop
 
         NativeLibrary.SetDllImportResolver(typeof(NativeLlamaInterop).Assembly, (libraryName, assembly, searchPath) =>
         {
-            if (!string.Equals(libraryName, LibName, StringComparison.OrdinalIgnoreCase))
+            bool isLlama = string.Equals(libraryName, LibName, StringComparison.OrdinalIgnoreCase);
+            bool isGgml = string.Equals(libraryName, "ggml", StringComparison.OrdinalIgnoreCase);
+            if (!isLlama && !isGgml)
                 return IntPtr.Zero;
 
             string fileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                ? "llama.dll"
+                ? (isLlama ? "llama.dll" : "ggml.dll")
                 : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    ? "libllama.dylib"
-                    : "libllama.so";
+                    ? (isLlama ? "libllama.dylib" : "libggml.dylib")
+                    : (isLlama ? "libllama.so" : "libggml.so");
 
             for (DirectoryInfo? current = new(Path.GetFullPath(kernelBinDir)); current is not null; current = current.Parent)
             {
@@ -44,6 +46,38 @@ internal static unsafe class NativeLlamaInterop
 
             return IntPtr.Zero;
         });
+    }
+
+    [DllImport("ggml", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void ggml_backend_load_all_from_path(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string directoryPath);
+
+    [DllImport("ggml", CallingConvention = CallingConvention.Cdecl)]
+    public static extern UIntPtr ggml_backend_reg_count();
+
+    public static string ResolveNativeDirectory(string kernelBinDir, string? configuredNativeDirectory)
+    {
+        for (DirectoryInfo? current = new(Path.GetFullPath(kernelBinDir)); current is not null; current = current.Parent)
+        {
+            var candidateDirectories = new List<string>();
+            if (!string.IsNullOrWhiteSpace(configuredNativeDirectory))
+            {
+                candidateDirectories.Add(Path.IsPathRooted(configuredNativeDirectory)
+                    ? configuredNativeDirectory
+                    : Path.Combine(current.FullName, configuredNativeDirectory));
+            }
+            candidateDirectories.Add(Path.Combine(current.FullName, "native"));
+
+            foreach (string directory in candidateDirectories.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (File.Exists(Path.Combine(directory, "llama.dll")) ||
+                    File.Exists(Path.Combine(directory, "libllama.dylib")) ||
+                    File.Exists(Path.Combine(directory, "libllama.so")))
+                    return Path.GetFullPath(directory);
+            }
+        }
+
+        throw new DllNotFoundException("Could not find the configured llama.cpp native library directory.");
     }
 
     public const int LoadModeMmap = 1;
